@@ -1,0 +1,56 @@
+{
+  "PackageName": "dp.icario.com",
+  "ServiceName": "tvhanh-kafka-offset-contactevent",
+  "FlinkApplication": {
+    "IsExisted": 0,
+    "ApplicationName": "tvhanh-kafka-offset-contactevent",
+    "ApplicationDescription": "My-Application-Description",
+    "RuntimeEnvironment": "FLINK-1_15"
+  },
+  "SchemaRegistry": {
+    "AWS_REGION": "us-east-1",
+    "REGISTRY_NAME": "dp"
+  },
+  "DataSource": {
+    "SecretName": "dp",
+    "MSSQL": [
+      {
+        "DatabaseName": "Wellcare_Reporting",
+        "TableList": [
+          {
+            "SchemaName": "rpt",
+            "TableName": "ContactEvent",
+            "DataProductName": "kafka_offset_dbo_ContactEvent",
+            "DataStewardName": "Hanh_Trinh",
+            "DataStewardEmail": "hanh.trinh@icario.com",
+            "IsPartition": 0,
+            "PartitionBy": ""
+          }
+
+        ],
+        "IsAuthenticated": 0
+      }
+
+    ]
+
+  },
+  "KafkaTopic": {
+    "TopicPrefix": "tvhanh-kafka-offset-contactevent",
+    "GroupId": "repo_name_group",
+    "IsExisted": 0,
+    "Authentication": ["SCRAM"]
+  },
+  "Transformation": {},
+  "Aws": {
+    "Bucket": {
+      "name": "dhp-data-platform",
+      "IsAccessed": 0,
+      "Raw": {
+        "path": "Raw/"
+      },
+      "Native": {
+        "path": "Native/"
+      }
+    }
+  }
+}

@@ -1,0 +1,60 @@
+name: Main Workflow for data_ingestion_pipeline
+
+on:
+  push:
+    branches:
+      - QA/ContactEvent-kafka-offset
+    paths:
+      - data_ingestion_pipeline/**
+
+jobs:
+  RunCI:
+    uses: ./.github/workflows/extract-data-test.yaml
+  Build-Artifact:
+    uses: ./.github/workflows/build.yaml
+    with:
+      working-directory: ./data_ingestion_pipeline
+      JAR_NAME: data_ingestion_pipeline
+    needs: RunCI
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.DEP_DHP_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.DEP_DHP_SECRET_KEY }}
+      ROLE_TO_ASSUME: ${{ secrets.DEP_DHP_DEV_ROLE_ARN }}
+      ARTIFACTORY_DP_USER: ${{ secrets.ARTIFACTORY_DP_USER }}
+      ARTIFACTORY_DP_PASSWORD: ${{ secrets.ARTIFACTORY_DP_PASSWORD }}
+  Deploy-Dev:
+    uses: ./.github/workflows/extract-data-template.yaml
+    needs: Build-Artifact
+    with:
+      environment: dev
+      JAR_NAME: data_ingestion_pipeline
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.DEP_DHP_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.DEP_DHP_SECRET_KEY }}
+      ROLE_TO_ASSUME: ${{ secrets.DEP_DHP_DEV_ROLE_ARN }}
+      ARTIFACTORY_DP_USER: ${{ secrets.ARTIFACTORY_DP_USER }}
+      ARTIFACTORY_DP_PASSWORD: ${{ secrets.ARTIFACTORY_DP_PASSWORD }}
+  Deploy-Tst:
+    uses: ./.github/workflows/extract-data-template.yaml
+    needs: Deploy-Dev
+    with:
+      environment: tst
+      JAR_NAME: data_ingestion_pipeline
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.DEP_DHP_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.DEP_DHP_SECRET_KEY }}
+      ROLE_TO_ASSUME: ${{ secrets.DEP_DHP_TST_ROLE_ARN }}
+      ARTIFACTORY_DP_USER: ${{ secrets.ARTIFACTORY_DP_USER }}
+      ARTIFACTORY_DP_PASSWORD: ${{ secrets.ARTIFACTORY_DP_PASSWORD }}
+  Deploy-Prd:
+    uses: ./.github/workflows/extract-data-template.yaml
+    needs: Deploy-Tst
+    with:
+      environment: prod
+      JAR_NAME: data_ingestion_pipeline
+    secrets:
+      ROLE_TO_ASSUME: ${{ secrets.DEP_DHP_PRD_ROLE_ARN }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.DEP_DHP_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.DEP_DHP_SECRET_KEY }}
+      ARTIFACTORY_DP_USER: ${{ secrets.ARTIFACTORY_DP_USER }}
+      ARTIFACTORY_DP_PASSWORD: ${{ secrets.ARTIFACTORY_DP_PASSWORD }}

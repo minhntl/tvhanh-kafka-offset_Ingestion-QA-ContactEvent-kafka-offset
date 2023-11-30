@@ -1,0 +1,18 @@
+{
+  "type": "record",
+  "name": "BaseUser",
+  "fields": [
+    { "name": "USERID", "type": "long" },
+    { "name": "FIRSTNAME", "type": "string" },
+    { "name": "LASTNAME", "type": "string" },
+    { "name": "BirthDate", "type": "string" },
+    { "name": "Gender", "type": ["null", "string"] },
+    { "name": "ADDRESSLINE1", "type": "string" },
+    { "name": "Imported", "type": "boolean" },
+    { "name": "RelevateProcessed", "type": "int" },
+    { "name": "LandLine", "type": "double" },
+    { "name": "Protocol", "type": "string" },
+    { "name": "RecordInserted", "type": ["null", { "type": "int", "logicalType": "date" }] },
+    { "name": "UTCDateTime", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

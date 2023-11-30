@@ -1,0 +1,103 @@
+name: data-ingestion-pipeline
+on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        description: environment to deploy
+        required: true
+      JAR_NAME:
+        type: string
+        description: jar name used in the pipeline
+        required: true
+    secrets:
+      ROLE_TO_ASSUME:
+        required: true
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      ARTIFACTORY_DP_USER:
+        required: true
+      ARTIFACTORY_DP_PASSWORD:
+        required: true
+
+permissions:
+  id-token: write
+  contents: write
+
+env:
+  JFROG_REPOSITORY: dev-gradle-snapshot-local
+
+jobs:
+  build:
+    name: Deploy
+    environment: ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./data_ingestion_pipeline
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-skip-session-tagging: true
+          aws-access-key-id: '${{ secrets.AWS_ACCESS_KEY_ID }}'
+          aws-secret-access-key: '${{ secrets.AWS_SECRET_ACCESS_KEY }}'
+          role-to-assume: '${{ secrets.ROLE_TO_ASSUME }}'
+          aws-region: us-east-1
+
+      - name: Retrieve API from Secrets Manager
+        uses: aws-actions/aws-secretsmanager-get-secrets@v1
+        with:
+          secret-ids: |
+            GITHUB_AUTH, dp
+          parse-json-secrets: true
+
+      - name: Read JSON template
+        id: read_json
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const path = '${{ github.workspace }}/${{ inputs.JAR_NAME }}/src/main/resources/template.json';
+            const jsonString = fs.readFileSync(path, 'utf8')
+            var data = JSON.parse(jsonString)
+            core.exportVariable('FULL_NAME', data.FlinkApplication.ApplicationName + '_ingest')
+
+
+      - name: Generate job version
+        run: |
+          echo "JOB_VERSION=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV
+
+      - uses: jfrog/setup-jfrog-cli@v3
+        env:
+          # JFrog platform url (for example: https://acme.jfrog.io)
+          JF_URL: ${{ env.GITHUB_AUTH_JF_URL }}
+          # Basic authentication credential
+          JF_USER: ${{ secrets.ARTIFACTORY_DP_USER }}
+          JF_PASSWORD: ${{ secrets.ARTIFACTORY_DP_PASSWORD }}
+
+      - name: Download Build from Artifactory
+        run: |
+          jf rt dl ${{ env.JFROG_REPOSITORY }}/${{ env.JOB_VERSION }}/${{ inputs.JAR_NAME }}-1.0.0.jar ${{ github.workspace }}/${{ inputs.JAR_NAME }}/
+
+      - name: Upload artifact to S3
+        run: |
+          ls -R '${{ github.workspace }}/${{ inputs.JAR_NAME }}' 
+          ls '${{ github.workspace }}/${{ inputs.JAR_NAME }}/${{ env.JOB_VERSION }}'
+          aws s3 cp '${{ github.workspace }}/${{ inputs.JAR_NAME }}/${{ env.JOB_VERSION }}/${{ inputs.JAR_NAME }}-1.0.0.jar' s3://dp-flink-apps-${{ inputs.environment }}/data-platform/${{ env.FULL_NAME }}/${{ inputs.JAR_NAME }}-${{ env.JOB_VERSION }}.jar
+
+      - name: Upsert AWS Flink application
+        id: flinkRequest
+        uses: fjogeleit/http-request-action@v1
+        with:
+          url: "${{ env.GITHUB_AUTH_FLINK_API_GATEWAY_URL }}"
+          method: "POST"
+          customHeaders: '{"Authorization": ${{ env.GITHUB_AUTH_AWS_LAMBDA_AUTHORIZATION_VALUE }}}'
+          contentType: "application/json"
+          responseFile: "${{ github.workspace }}/run.json"
+          timeout: 60000
+          data: '{"RequestType": "AUTOMATE","ResourceProperties": {"ApplicationName": "${{ env.FULL_NAME }}","S3ObjectKey": "data-platform/${{ env.FULL_NAME }}/${{ inputs.JAR_NAME }}-${{ env.JOB_VERSION }}.jar", "CheckpointConfiguration": {"CheckpointingEnabled": true}, "ApplicationSnapshotConfiguration": {"SnapshotsEnabled": false}, "ParallelismConfiguration": {"ConfigurationType": "CUSTOM", "AutoScalingEnabled": true, "Parallelism": 8, "ParallelismPerKPU": 4}}}'

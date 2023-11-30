@@ -1,0 +1,8 @@
+{
+  "type": "record",
+  "name": "BaseUser",
+  "fields": [
+    { "name": "USERID", "type": "long" },
+    { "name": "FIRSTNAME", "type": "string" }
+  ]
+}

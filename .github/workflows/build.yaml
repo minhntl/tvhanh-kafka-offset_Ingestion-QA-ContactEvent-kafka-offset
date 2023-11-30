@@ -1,0 +1,79 @@
+name: Build Jar & Upload Artifact
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        required: true
+        type: 'string'
+      JAR_NAME:
+        type: string
+        description: jar name used in the build
+        required: true
+    secrets:
+      ROLE_TO_ASSUME:
+        required: true
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      ARTIFACTORY_DP_USER:
+        required: true
+      ARTIFACTORY_DP_PASSWORD:
+        required: true
+permissions:
+  id-token: write
+  contents: write
+
+env:
+  JFROG_REPOSITORY: dev-gradle-snapshot-local
+
+jobs:
+  Build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3
+        with:
+          java-version: 11
+          distribution: 'corretto'
+          cache: maven
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-skip-session-tagging: true
+          aws-access-key-id: '${{ secrets.AWS_ACCESS_KEY_ID }}'
+          aws-secret-access-key: '${{ secrets.AWS_SECRET_ACCESS_KEY }}'
+          role-to-assume: '${{ secrets.ROLE_TO_ASSUME }}'
+          aws-region: us-east-1
+
+      - name: Retrieve API from Secrets Manager
+        uses: aws-actions/aws-secretsmanager-get-secrets@v1
+        with:
+          secret-ids: |
+            GITHUB_AUTH, dp
+          parse-json-secrets: true
+
+      - uses: jfrog/setup-jfrog-cli@v3
+        env:
+          JF_URL: ${{ env.GITHUB_AUTH_JF_URL }}
+          JF_USER: ${{ secrets.ARTIFACTORY_DP_USER }}
+          JF_PASSWORD: ${{ secrets.ARTIFACTORY_DP_PASSWORD }}
+
+      - name: Generate job version
+        run: |
+          echo "JOB_VERSION=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV
+      - name: Build project with Maven
+        run: mvn -B package --file pom.xml
+
+      - name: Push Build to Artifactory
+        run: |
+          mkdir ${{ env.JOB_VERSION }}
+          mv ${{ github.workspace }}/${{ inputs.JAR_NAME }}/target/${{ inputs.JAR_NAME }}-1.0.0.jar ${{ env.JOB_VERSION }}
+          jf rt u ${{ env.JOB_VERSION }}/ ${{ env.JFROG_REPOSITORY }}
